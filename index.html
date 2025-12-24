@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1e1e2e">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Cloud OS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* --- THEME VARIABLES --- */
+        :root {
+            /* Dark Mode (Default) */
+            --bg-color: #1e1e2e;
+            --nav-bg: #15151a;
+            --window-bg: #282a36; /* Background for Window Container */
+            --iframe-bg: #ffffff; /* Actual Webpage Background (Standard White) */
+            --text: #e0e0e0;
+            --text-muted: #999;
+            --border: #44475a;
+            --accent: #bd93f9;
+            --tab-inactive-bg: #25252e;
+            --tab-active-bg: #383845; /* Dark Active Tab */
+            --nav-h: 36px;
+        }
+
+        /* Light Mode Override */
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg-color: #f0f2f5;
+                --nav-bg: #ffffff;
+                --window-bg: #ffffff;
+                --iframe-bg: #ffffff;
+                --text: #222;
+                --text-muted: #555;
+                --border: #ccc;
+                --accent: #6200ea;
+                --tab-inactive-bg: #e5e7eb;
+                --tab-active-bg: #ffffff;
+            }
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0; height: 100vh; background: var(--bg-color);
+            background-image: radial-gradient(var(--border) 1px, transparent 1px);
+            background-size: 24px 24px;
+            font-family: 'Inter', sans-serif; color: var(--text); overflow: hidden;
+        }
+
+        /* --- Navbar --- */
+        nav {
+            height: var(--nav-h); background: var(--nav-bg);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: flex-end;
+            padding: 0 8px; position: fixed; top: 0; width: 100%; z-index: 99999;
+            gap: 8px;
+        }
+
+        .nav-controls { display: flex; height: 100%; align-items: center; gap: 5px; padding-bottom: 4px; }
+        .nav-btn {
+            width: 28px; height: 28px; border-radius: 6px; border: none;
+            background: transparent; color: var(--text-muted); cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: 0.2s;
+        }
+        .nav-btn:hover { background: rgba(128,128,128,0.2); color: var(--text); }
+
+        /* --- Tabs (Darker Style) --- */
+        .taskbar {
+            flex-grow: 1; display: flex; gap: 4px; overflow-x: auto; 
+            height: 100%; align-items: flex-end;
+        }
+        .taskbar::-webkit-scrollbar { height: 0; }
+
+        .task-tab {
+            background: var(--tab-inactive-bg); 
+            color: var(--text-muted);
+            padding: 0 10px; height: 28px; 
+            border-radius: 8px 8px 0 0;
+            font-size: 11px; display: flex; align-items: center; gap: 8px;
+            cursor: pointer; border: 1px solid transparent; 
+            min-width: 90px; max-width: 160px; transition: 0.1s;
+        }
+        
+        /* Active Tab - Matches Dark Theme */
+        .task-tab.active {
+            background: var(--tab-active-bg); 
+            color: var(--text) !important;
+            font-weight: 600; height: 32px;
+            border-top: 2px solid var(--accent);
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+        }
+
+        .task-close {
+            margin-left: auto; width: 18px; height: 18px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0.7; color: inherit;
+        }
+        .task-close:hover { background: #ff5555; color: white !important; opacity: 1; }
+
+        /* User Profile */
+        .user-container { position: relative; height: 100%; display: flex; align-items: center; padding-bottom: 4px; margin-left: auto; }
+        .user-img { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--accent); cursor: pointer; }
+        
+        .dropdown-menu {
+            position: absolute; top: 38px; right: 0;
+            background: var(--nav-bg); border: 1px solid var(--border);
+            border-radius: 8px; width: 140px; padding: 5px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: none;
+            flex-direction: column; z-index: 100001;
+        }
+        .dropdown-menu.show { display: flex; }
+        .menu-item { padding: 10px; font-size: 12px; color: var(--text); border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+        .menu-item:hover { background: rgba(128,128,128,0.1); }
+        .menu-item.danger { color: #ff5555; }
+
+        /* --- Desktop Icons --- */
+        #desktop {
+            margin-top: var(--nav-h); padding: 20px;
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 15px; height: calc(100vh - var(--nav-h)); overflow-y: auto;
+            align-content: flex-start;
+        }
+
+        .app-icon {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            cursor: pointer; transition: transform 0.2s; width: 100%;
+        }
+        .app-icon:hover { transform: translateY(-3px); }
+
+        .icon-frame {
+            width: 80px; height: 80px; background: white; border-radius: 12px;
+            overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border: 1px solid var(--border); position: relative;
+        }
+        /* Thumbnail Preview */
+        .preview-iframe {
+            width: 400%; height: 400%; border: none;
+            transform: scale(0.25); transform-origin: 0 0;
+            pointer-events: none; background: white;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .preview-iframe.loaded { opacity: 1; }
+
+        .app-name {
+            font-size: 11px; font-weight: 500; text-align: center;
+            color: var(--text); opacity: 0.9;
+            line-height: 1.2; max-width: 100%; word-wrap: break-word;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* --- MOBILE TWEAKS --- */
+        @media (max-width: 600px) {
+            #desktop {
+                grid-template-columns: repeat(3, 1fr); /* 3 Grid */
+                gap: 10px; padding: 10px;
+            }
+            .icon-frame {
+                width: 100%; aspect-ratio: 1/1; height: auto; 
+                border-radius: 10px;
+            }
+            .app-name { font-size: 10px; margin-top: 2px; }
+            .preview-iframe { transform: scale(0.25); width: 400%; height: 400%; }
+        }
+
+        /* --- Window System (Scroll Fix) --- */
+        .window {
+            position: absolute;
+            top: var(--nav-h); left: 0; width: 100%; height: calc(100vh - var(--nav-h));
+            background: var(--iframe-bg); 
+            display: flex; flex-direction: column;
+            z-index: 100;
+        }
+        .win-content { width: 100%; height: 100%; overflow: hidden; } /* Container hides overflow */
+        .win-content iframe { width: 100%; height: 100%; border: none; display: block; }
+
+        /* Login */
+        #loginOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color); z-index: 100000;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .google-btn {
+            background: #4285F4; color: white; border: none; padding: 10px 24px;
+            border-radius: 50px; font-size: 14px; font-weight: 500; 
+            cursor: pointer; display: flex; align-items: center; gap: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="nav-controls">
+            <button class="nav-btn" onclick="showDesktop()" title="Home"><i class="fas fa-th-large"></i></button>
+            <button class="nav-btn" id="globalRefreshBtn" onclick="refreshActiveApp()" title="Refresh"><i class="fas fa-redo-alt"></i></button>
+        </div>
+
+        <div class="taskbar" id="taskbar"></div>
+
+        <div class="user-container" id="userPanel" style="display:none;">
+            <img id="userImg" class="user-img" src="" onclick="toggleMenu(event)">
+            <div class="dropdown-menu" id="profileMenu">
+                <div class="menu-item" style="cursor:default; opacity:0.7; border-bottom:1px solid var(--border)">
+                    <i class="fas fa-user-circle"></i> Account
+                </div>
+                <div class="menu-item danger" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="desktop"></div>
+
+    <div id="loginOverlay">
+        <button class="google-btn" onclick="login()"><i class="fab fa-google"></i> Sign in with Google</button>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBjGj2saEt7bT4MC2Hlpes8EygTsRlfT8A",
+            authDomain: "codeedit-8a99d.firebaseapp.com",
+            projectId: "codeedit-8a99d",
+            storageBucket: "codeedit-8a99d.firebasestorage.app",
+            messagingSenderId: "1036184660506",
+            appId: "1:1036184660506:web:8e8c92ac621379d0bfbfa3"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const provider = new firebase.auth.GoogleAuthProvider();
+
+        let currentUser = null;
+        let zIndexCounter = 100;
+        let activeWindowId = null;
+        const CACHE_KEY = 'procloud_apps_v2';
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('userPanel').style.display = 'flex';
+                document.getElementById('userImg').src = user.photoURL;
+                loadAppsSmart();
+            } else {
+                document.getElementById('loginOverlay').style.display = 'flex';
+                document.getElementById('desktop').innerHTML = '';
+                document.getElementById('taskbar').innerHTML = '';
+                localStorage.removeItem(CACHE_KEY);
+            }
+        });
+
+        function login() { auth.signInWithPopup(provider); }
+        function logout() { auth.signOut(); location.reload(); }
+        
+        function toggleMenu(e) {
+            e.stopPropagation();
+            document.getElementById('profileMenu').classList.toggle('show');
+        }
+        window.onclick = () => document.getElementById('profileMenu').classList.remove('show');
+
+        // --- Load Logic ---
+        function loadAppsSmart() {
+            const desk = document.getElementById('desktop');
+            const cachedData = localStorage.getItem(CACHE_KEY);
+            
+            if (cachedData) {
+                try {
+                    const apps = JSON.parse(cachedData);
+                    renderIcons(apps);
+                } catch(e) {}
+            }
+
+            db.collection('codes')
+                .where('uid', '==', currentUser.uid)
+                .orderBy('createdAt', 'desc')
+                .get()
+                .then(snap => {
+                    if(!snap.empty) {
+                        const apps = snap.docs.map(doc => doc.data());
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(apps));
+                        renderIcons(apps);
+                    }
+                });
+        }
+
+        // --- Render Icons ---
+        function renderIcons(apps) {
+            const desk = document.getElementById('desktop');
+            desk.innerHTML = ''; 
+
+            apps.forEach(d => {
+                const code = combineCode(d);
+                const el = document.createElement('div');
+                el.className = 'app-icon';
+                el.onclick = () => openApp(d.name || 'Untitled', code);
+                
+                el.innerHTML = `
+                    <div class="icon-frame">
+                        <iframe class="preview-iframe" 
+                                onload="this.classList.add('loaded')" 
+                                srcdoc="${escapeHtml(code)}" 
+                                loading="lazy">
+                        </iframe>
+                    </div>
+                    <div class="app-name">${d.name || 'Untitled'}</div>
+                `;
+                desk.appendChild(el);
+            });
+        }
+
+        // --- OPEN APP ---
+        function openApp(title, content) {
+            const id = 'win_' + Date.now();
+            zIndexCounter++;
+
+            const blob = new Blob([content], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+
+            const win = document.createElement('div');
+            win.className = 'window';
+            win.id = id;
+            win.style.zIndex = zIndexCounter;
+            
+            win.innerHTML = `
+                <div class="win-content">
+                    <iframe id="iframe_${id}" src="${url}" allowfullscreen></iframe>
+                </div>
+            `;
+            document.body.appendChild(win);
+
+            createTab(id, title);
+            focusApp(id);
+        }
+
+        // --- Tabs ---
+        function createTab(id, title) {
+            const taskbar = document.getElementById('taskbar');
+            const tab = document.createElement('div');
+            tab.className = 'task-tab';
+            tab.id = 'tab_' + id;
+            tab.onclick = () => focusApp(id);
+            tab.ondblclick = () => minimizeApp(id);
+            
+            tab.innerHTML = `
+                <i class="fas fa-globe" style="font-size:10px;"></i> 
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-grow:1;">${title}</span>
+                <div class="task-close" onclick="event.stopPropagation(); closeApp('${id}')"><i class="fas fa-times"></i></div>
+            `;
+            taskbar.appendChild(tab);
+        }
+
+        function focusApp(id) {
+            zIndexCounter++;
+            const win = document.getElementById(id);
+            if(win) {
+                win.style.display = 'flex';
+                win.style.zIndex = zIndexCounter;
+            }
+            document.querySelectorAll('.task-tab').forEach(t => t.classList.remove('active'));
+            const tab = document.getElementById('tab_' + id);
+            if(tab) tab.classList.add('active');
+            activeWindowId = id;
+            updateRefreshBtnState();
+        }
+
+        function minimizeApp(id) {
+            const win = document.getElementById(id);
+            if(win) win.style.display = 'none';
+            const tab = document.getElementById('tab_' + id);
+            if(tab) tab.classList.remove('active');
+            activeWindowId = null;
+            updateRefreshBtnState();
+        }
+
+        function closeApp(id) {
+            const win = document.getElementById(id);
+            if(win) win.remove();
+            const tab = document.getElementById('tab_' + id);
+            if(tab) tab.remove();
+
+            const remainingTabs = document.querySelectorAll('.task-tab');
+            if(remainingTabs.length > 0) {
+                const lastTabId = remainingTabs[remainingTabs.length - 1].id.replace('tab_', '');
+                focusApp(lastTabId);
+            } else {
+                activeWindowId = null;
+                updateRefreshBtnState();
+            }
+        }
+
+        function showDesktop() {
+            document.querySelectorAll('.window').forEach(w => w.style.display = 'none');
+            document.querySelectorAll('.task-tab').forEach(t => t.classList.remove('active'));
+            activeWindowId = null;
+            updateRefreshBtnState();
+        }
+
+        function refreshActiveApp() {
+            if(activeWindowId) {
+                const iframe = document.getElementById('iframe_' + activeWindowId);
+                if(iframe) iframe.src = iframe.src;
+            }
+        }
+
+        function updateRefreshBtnState() {
+            const btn = document.getElementById('globalRefreshBtn');
+            btn.style.opacity = activeWindowId ? '1' : '0.3';
+        }
+
+        function combineCode(d) {
+            // FIX: Removed 'overflow:hidden' from body style to allow scrolling
+            return `<!DOCTYPE html><html><head><style>body{margin:0; background-color: white;} ${d.css||''}</style></head><body>${d.html||''}<script>${d.js||''}<\/script></body></html>`;
+        }
+        function escapeHtml(text) { 
+            if(!text) return '';
+            return text.replace(/"/g, '&quot;'); 
+        }
+
+    </script>
+  <script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');
+</script>
+</body>
+</html>
